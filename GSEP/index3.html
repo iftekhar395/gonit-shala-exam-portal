@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Secure Exam Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- Tesseract.js for Image/OCR MCQ Reading (Bengali + English) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- PDF.js for PDF Reading -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+  <header class="bg-indigo-600 text-white shadow-md p-4 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <!-- Dynamic Institution Logo -->
+        <img id="header-logo" src="/images/logo.jpeg" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-lg p-1 shadow">
+        <h1 id="header-title" class="text-xl font-bold tracking-wide">Nexus Secure Exam Portal</h1>
+      </div>
+      <div>
+        <span id="cloud-status" class="text-xs bg-indigo-700 px-3 py-1 rounded-full text-indigo-200">
+          Cloud Mode: Local Storage
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 sm:p-6">
+
+    <!-- TEACHER DASHBOARD -->
+    <section id="teacher-view" class="hidden space-y-6">
+      <div class="flex justify-between items-center bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+        <span class="text-sm font-bold text-indigo-900">🔒 Teacher Admin Panel (Saved for Reuse)</span>
+        <button onclick="logoutTeacher()" class="text-xs bg-red-600 text-white font-semibold px-3 py-1.5 rounded hover:bg-red-700">
+          Exit to Student View
+        </button>
+      </div>
+
+      <!-- Exam Configuration & Branding -->
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-900 mb-2">1. Exam Configuration & Branding</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Exam Title</label>
+            <input type="text" id="cfg-title" value="General Knowledge Quiz" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Duration (Minutes)</label>
+            <input type="number" id="cfg-duration" value="10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pass Mark (%)</label>
+            <input type="number" id="cfg-passmark" value="60" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Institution Logo Path</label>
+            <input type="text" id="cfg-logo" value="/images/logo.jpeg" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300" placeholder="e.g. /images/logo.jpeg">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Allowed Student Contact Numbers (Comma Separated)</label>
+            <input type="text" id="cfg-whitelist" value="01711111111, 01822222222, 01933333333" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300" placeholder="e.g. 01711111111, 01822222222">
+          </div>
+        </div>
+      </div>
+
+      <!-- Question Bank & File Uploader -->
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <h2 class="text-lg font-bold text-slate-900">2. Question Bank</h2>
+          <div class="flex items-center gap-2">
+            <label class="cursor-pointer bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-2 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1">
+              <span>📁 Upload Question File (PDF, JPG, JPEG, JSON)</span>
+              <input type="file" id="question-file-input" accept=".json,.txt,.csv,.pdf,.jpg,.jpeg,.png" class="hidden" onchange="handleFileUpload(event)">
+            </label>
+            <button onclick="loadSampleQuestions()" class="text-xs bg-slate-100 text-slate-700 font-medium px-3 py-2 rounded-lg hover:bg-slate-200">
+              Load Sample
+            </button>
+          </div>
+        </div>
+        <div id="ocr-status" class="text-xs text-indigo-600 font-medium mb-3 hidden"></div>
+        <div id="question-list" class="space-y-3 mb-4"></div>
+        <button onclick="addQuestionField()" class="w-full border-2 border-dashed border-indigo-200 text-indigo-600 font-semibold py-3 rounded-xl hover:bg-indigo-50/50 transition text-sm">
+          + Add New Question Manually
+        </button>
+      </div>
+
+      <!-- Submissions Log -->
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-slate-900">3. Live Cloud Submissions Log</h2>
+          <button onclick="syncResultsFromCloud()" class="text-xs bg-indigo-50 text-indigo-600 font-semibold px-3 py-1.5 rounded hover:bg-indigo-100">
+            ↻ Refresh Results
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-100 text-slate-600">
+              <tr>
+                <th class="p-3">Student Name</th>
+                <th class="p-3">Class</th>
+                <th class="p-3">Roll</th>
+                <th class="p-3">Contact (Verified)</th>
+                <th class="p-3">Score</th>
+                <th class="p-3">Percentage</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Submitted At</th>
+              </tr>
+            </thead>
+            <tbody id="results-table-body">
+              <tr>
+                <td colspan="8" class="p-4 text-center text-slate-400">No submissions recorded yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- STUDENT EXAM SECTION -->
+    <section id="student-view" class="space-y-6">
+      
+      <!-- Student Login Card -->
+      <div id="student-login-card" class="max-w-md mx-auto bg-white p-8 rounded-2xl shadow-lg border border-slate-200 text-center">
+        <div class="flex justify-center mb-4">
+          <img id="login-card-logo" src="/images/logo.jpeg" alt="Logo" class="w-16 h-16 object-contain bg-slate-50 rounded-full p-2 border shadow-sm">
+        </div>
+        <h2 id="login-portal-title" class="text-2xl font-bold text-slate-900 mb-2">Student Examination Portal</h2>
+        <p class="text-sm text-slate-500 mb-6">Enter your authorized details to begin.</p>
+        <div class="space-y-4 text-left">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Full Name</label>
+            <input type="text" id="std-name" placeholder="e.g. Jane Doe" class="w-full border rounded-lg p-3 border-slate-300">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Class</label>
+              <input type="text" id="std-class" placeholder="e.g. 10" class="w-full border rounded-lg p-3 border-slate-300">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Roll / ID</label>
+              <input type="text" id="std-roll" placeholder="e.g. 101" class="w-full border rounded-lg p-3 border-slate-300">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Contact Number (Used for Verification)</label>
+            <input type="text" id="std-contact" placeholder="e.g. 01711111111" class="w-full border rounded-lg p-3 border-slate-300">
+          </div>
+          <button onclick="startStudentExam()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg shadow hover:bg-indigo-700 transition">
+            Verify & Start Examination
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Test Portal -->
+      <div id="student-test-portal" class="hidden grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-3 space-y-4">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+            <div>
+              <h3 id="exam-display-title" class="font-bold text-slate-800">Exam Title</h3>
+              <p class="text-xs text-slate-500" id="std-display-info">Student Info</p>
+            </div>
+            <div class="text-right">
+              <span class="text-xs uppercase font-semibold text-slate-400">Time Remaining</span>
+              <div id="timer-display" class="text-xl font-mono font-bold text-red-600">00:00</div>
+            </div>
+          </div>
+
+          <div id="question-card" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center">
+              <span id="question-number-badge" class="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded">Question 1</span>
+              <button onclick="toggleFlagCurrentQuestion()" id="flag-btn" class="text-xs font-medium text-slate-400 hover:text-amber-600">
+                ⚐ Flag for Review
+              </button>
+            </div>
+            <p id="question-text" class="text-base font-semibold text-slate-800">Question prompt appears here?</p>
+            <div id="options-container" class="space-y-2 pt-2"></div>
+            <div class="flex justify-between pt-4 border-t border-slate-100">
+              <button onclick="navigateQuestion(-1)" id="prev-btn" class="px-4 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50">Previous</button>
+              <button onclick="navigateQuestion(1)" id="next-btn" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm hover:bg-slate-900">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <h4 class="text-xs font-bold uppercase text-slate-400 mb-3">Question Palette</h4>
+            <div id="palette-grid" class="grid grid-cols-5 gap-2"></div>
+            <button onclick="submitExam()" class="w-full mt-6 bg-emerald-600 text-white font-bold py-2.5 rounded-lg shadow hover:bg-emerald-700 transition">
+              Submit Exam
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Scorecard -->
+      <div id="student-scorecard" class="hidden max-w-xl mx-auto bg-white p-8 rounded-2xl shadow-lg border border-slate-200 text-center space-y-4">
+        <h2 class="text-2xl font-bold text-slate-900">Exam Results</h2>
+        <div id="pass-fail-badge" class="inline-block px-4 py-1.5 rounded-full font-bold text-sm">PASSED</div>
+        <div class="grid grid-cols-2 gap-4 py-4 border-y">
+          <div>
+            <p class="text-xs text-slate-400 uppercase">Score</p>
+            <p id="final-score" class="text-3xl font-extrabold text-slate-800">0 / 0</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase">Percentage</p>
+            <p id="final-percentage" class="text-3xl font-extrabold text-slate-800">0%</p>
+          </div>
+        </div>
+        <button onclick="location.reload()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-lg shadow hover:bg-slate-900 transition">
+          Return to Portal
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script>
+    // -------------------------------------------------------------
+    // FIREBASE CONFIGURATION
+    // -------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
+  authDomain: "gonitshala-5a622.firebaseapp.com",
+  projectId: "gonitshala-5a622",
+  storageBucket: "gonitshala-5a622.firebasestorage.app",
+  messagingSenderId: "492965096585",
+  appId: "1:492965096585:web:42f96defa9182162ee2a58",
+  measurementId: "G-JJ0RWNLHR0"
+};
+
+    let db = null;
+    let isCloudConnected = false;
+
+    try {
+      if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        isCloudConnected = true;
+        document.getElementById('cloud-status').innerText = "Cloud Sync: Connected (Firebase)";
+        document.getElementById('cloud-status').className = "text-xs bg-emerald-700 px-3 py-1 rounded-full text-emerald-100";
+      }
+    } catch (e) {
+      console.warn("Firebase initialization failed. Using localStorage.", e);
+    }
+
+    const TEACHER_PASSWORD = "admin123";
+
+    let masterQuestions = [];
+    let activeExamQuestions = []; 
+    let currentQuestionIdx = 0;
+    let studentAnswers = {};
+    let flaggedQuestions = {};
+    let timerInterval = null;
+    let timeRemainingSeconds = 0;
+
+    window.onload = function() {
+      loadSavedData();
+      if (window.location.hash === '#admin') {
+        promptTeacherLogin();
+      }
+    };
+
+    // --- Persistence & Branding Functions ---
+function saveConfig() {
+  const config = {
+    title: document.getElementById('cfg-title').value,
+    duration: document.getElementById('cfg-duration').value,
+    passmark: document.getElementById('cfg-passmark').value,
+    whitelist: document.getElementById('cfg-whitelist').value,
+    logo: document.getElementById('cfg-logo').value
+  };
+  
+  // Save locally
+  localStorage.setItem('nexus_exam_config', JSON.stringify(config));
+  applyBranding(config);
+
+  // Save to Cloud (Firebase) if connected
+  if (isCloudConnected && db) {
+    db.collection("exam_settings").doc("config").set(config)
+      .then(() => console.log("Config synced to cloud!"))
+      .catch(err => console.error("Error saving config to cloud:", err));
+  }
+} 
+
+    function applyBranding(cfg) {
+      if (cfg.title) {
+        document.getElementById('header-title').innerText = cfg.title;
+        document.getElementById('login-portal-title').innerText = cfg.title + " - Student Portal";
+      }
+      if (cfg.logo) {
+        document.getElementById('header-logo').src = cfg.logo;
+        document.getElementById('login-card-logo').src = cfg.logo;
+      }
+    }
+
+    function saveQuestions() {
+      localStorage.setItem('nexus_question_bank', JSON.stringify(masterQuestions));
+      renderTeacherQuestions();
+    }
+
+function loadSavedData() {
+  // First check local storage for instant load
+  const savedConfig = localStorage.getItem('nexus_exam_config');
+  if (savedConfig) {
+    const cfg = JSON.parse(savedConfig);
+    document.getElementById('cfg-title').value = cfg.title || "General Knowledge Quiz";
+    document.getElementById('cfg-duration').value = cfg.duration || 10;
+    document.getElementById('cfg-passmark').value = cfg.passmark || 60;
+    document.getElementById('cfg-whitelist').value = cfg.whitelist || "";
+    document.getElementById('cfg-logo').value = cfg.logo || "/images/logo.jpeg";
+    applyBranding(cfg);
+  }
+
+  // If cloud is connected, fetch the latest live config from Firebase so students get the whitelist
+  if (isCloudConnected && db) {
+    db.collection("exam_settings").doc("config").get().then((doc) => {
+      if (doc.exists) {
+        const cfg = doc.data();
+        document.getElementById('cfg-title').value = cfg.title || "";
+        document.getElementById('cfg-duration').value = cfg.duration || 10;
+        document.getElementById('cfg-passmark').value = cfg.passmark || 60;
+        document.getElementById('cfg-whitelist').value = cfg.whitelist || "";
+        document.getElementById('cfg-logo').value = cfg.logo || "/images/logo.jpeg";
+        applyBranding(cfg);
+        localStorage.setItem('nexus_exam_config', JSON.stringify(cfg));
+      }
+    }).catch(err => console.warn("Could not load config from cloud", err));
+  }
+
+  const savedQuestions = localStorage.getItem('nexus_question_bank');
+  if (savedQuestions) {
+    try {
+      masterQuestions = JSON.parse(savedQuestions);
+    } catch(e) { masterQuestions = []; }
+  }
+
+  if (masterQuestions.length === 0) {
+    loadSampleQuestions();
+  } else {
+    renderTeacherQuestions();
+  }
+}
+
+    function promptTeacherLogin() {
+      const pwd = prompt("Enter Teacher Password:");
+      if (pwd === TEACHER_PASSWORD) {
+        document.getElementById('teacher-view').classList.remove('hidden');
+        document.getElementById('student-view').classList.add('hidden');
+        syncResultsFromCloud();
+      } else {
+        alert("Incorrect password!");
+        window.location.hash = '';
+      }
+    }
+
+    function logoutTeacher() {
+      window.location.hash = '';
+      document.getElementById('teacher-view').classList.add('hidden');
+      document.getElementById('student-view').classList.remove('hidden');
+    }
+
+    function loadSampleQuestions() {
+      masterQuestions = [
+        {
+          id: 1,
+          text: "বাংলাদেশের রাজধানী কোথায়?",
+          options: ["ঢাকা", "চট্টগ্রাম", "সিলেট", "খুলনা"],
+          correct: 0
+        },
+        {
+          id: 2,
+          text: "জাতীয় কবি কে?",
+          options: ["রবীন্দ্রনাথ ঠাকুর", "কাজী নজরুল ইসলাম", "জসীমউদ্দীন", "ফররুখ আহমেদ"],
+          correct: 1
+        }
+      ];
+      saveQuestions();
+    }
+
+    function renderTeacherQuestions() {
+      const container = document.getElementById('question-list');
+      container.innerHTML = '';
+      masterQuestions.forEach((q, idx) => {
+        const item = document.createElement('div');
+        item.className = "p-4 bg-slate-50 border rounded-lg text-sm space-y-2";
+        item.innerHTML = `
+          <div class="flex justify-between font-semibold text-slate-700">
+            <span>Q${idx + 1}: ${q.text}</span>
+            <button onclick="removeQuestion(${idx})" class="text-red-500 text-xs hover:underline">Remove</button>
+          </div>
+          <div class="text-xs text-slate-500">Options: ${q.options.join(', ')} | Correct Index: ${q.correct}</div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function addQuestionField() {
+      const text = prompt("Enter Question Prompt:");
+      if (!text) return;
+      const optA = prompt("Option A (e.g. ক ...):");
+      const optB = prompt("Option B (e.g. খ ...):");
+      const optC = prompt("Option C (e.g. গ ...):");
+      const optD = prompt("Option D (e.g. ঘ ...):");
+      const correctIdx = parseInt(prompt("Enter Index of Correct Option (0 for 1st option, 1 for 2nd, etc.):") || "0");
+
+      masterQuestions.push({
+        id: Date.now(),
+        text: text,
+        options: [optA, optB, optC, optD],
+        correct: correctIdx
+      });
+      saveQuestions();
+    }
+
+    function removeQuestion(idx) {
+      masterQuestions.splice(idx, 1);
+      saveQuestions();
+    }
+
+    // --- File Uploader & PDF/OCR Parser (Supports Bengali ben+eng) ---
+    async function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const statusEl = document.getElementById('ocr-status');
+      statusEl.classList.remove('hidden');
+      statusEl.innerText = `Reading file (${file.name})... Please wait.`;
+
+      const fileExtension = file.name.split('.').pop().toLowerCase();
+
+      if (fileExtension === 'json') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const parsed = JSON.parse(e.target.result);
+            if (Array.isArray(parsed)) {
+              masterQuestions = masterQuestions.concat(parsed);
+              saveQuestions();
+              statusEl.innerText = `Successfully loaded ${parsed.length} questions from JSON!`;
+            } else {
+              alert("Invalid JSON format. Expected an array of questions.");
+              statusEl.classList.add('hidden');
+            }
+          } catch(err) { 
+            alert("Error parsing JSON file."); 
+            statusEl.classList.add('hidden');
+          }
+        };
+        reader.readAsText(file);
+      } 
+      else if (fileExtension === 'pdf') {
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+          try {
+            const typedarray = new Uint8Array(e.target.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + "\n";
+            }
+            statusEl.innerText = `PDF read successfully. Parsing Bengali questions...`;
+            parseTextIntoQuestions(fullText);
+          } catch (err) {
+            alert("Error reading PDF file.");
+            statusEl.classList.add('hidden');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+      else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+        try {
+          const result = await Tesseract.recognize(file, 'ben+eng');
+          statusEl.innerText = `OCR complete. Processing extracted text...`;
+          parseTextIntoQuestions(result.data.text);
+        } catch (err) {
+          alert("Error reading image with OCR.");
+          statusEl.classList.add('hidden');
+        }
+      } 
+      else if (fileExtension === 'txt' || fileExtension === 'csv') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          parseTextIntoQuestions(e.target.result);
+        };
+        reader.readAsText(file);
+      } 
+      else {
+        alert("Please upload a .json, .pdf, .txt, .csv, .jpg, or .png file.");
+        statusEl.classList.add('hidden');
+      }
+    }
+
+    function parseTextIntoQuestions(text) {
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const statusEl = document.getElementById('ocr-status');
+      
+      let addedCount = 0;
+      let currentQ = null;
+      let currentOpts = [];
+
+      lines.forEach(line => {
+        if (line.match(/^([0-9０-９१-९০-৯]+[\.|\)]|প্রশ্ন[\s:-])/)) {
+          if (currentQ && currentOpts.length >= 2) {
+            masterQuestions.push({ id: Date.now() + Math.random(), text: currentQ, options: currentOpts, correct: 0 });
+            addedCount++;
+          }
+          currentQ = line.replace(/^([0-9０-９१-९০-৯]+[\.|\)]|প্রশ্ন[\s:-])/, '').trim();
+          currentOpts = [];
+        } 
+        else if (line.match(/^([A-D|ক-ঘ|১-৪][\.\)]|\([ক-ঘ|A-D]\))/i)) {
+          let cleanOpt = line.replace(/^([A-D|ক-ঘ|১-৪][\.\)]|\([ক-ঘ|A-D]\))/i, '').trim();
+          currentOpts.push(cleanOpt);
+        }
+      });
+
+      if (currentQ && currentOpts.length >= 2) {
+        masterQuestions.push({ id: Date.now() + Math.random(), text: currentQ, options: currentOpts, correct: 0 });
+        addedCount++;
+      }
+
+      if (addedCount > 0) {
+        saveQuestions();
+        statusEl.innerText = `Successfully extracted and added ${addedCount} Bengali questions!`;
+      } else {
+        alert("Could not automatically structure questions. Make sure questions start with numbers (১., ২.) and options start with (ক, খ, ঘ) or (A, B, C, D).");
+        statusEl.classList.add('hidden');
+      }
+    }
+
+    function shuffleArray(array) {
+      let arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function startStudentExam() {
+      const name = document.getElementById('std-name').value.trim();
+      const studentClass = document.getElementById('std-class').value.trim();
+      const studentRoll = document.getElementById('std-roll').value.trim();
+      const contact = document.getElementById('std-contact').value.trim();
+
+      if (!name || !studentClass || !studentRoll || !contact) {
+        alert("দয়া করে নাম, শ্রেণি, রোল এবং যোগাযোগের নম্বর দিন।");
+        return;
+      }
+
+      const rawWhitelist = document.getElementById('cfg-whitelist').value;
+      const allowedContacts = rawWhitelist.split(',').map(item => item.trim());
+
+      if (!allowedContacts.includes(contact)) {
+        alert("প্রবেশাধিকার সংরক্ষিত: আপনার যোগাযোগের নম্বরটি এই পরীক্ষার জন্য অনুমোদিত নয়।");
+        return;
+      }
+
+      if (masterQuestions.length === 0) {
+        alert("প্রশ্ন ব্যাংকে কোনো প্রশ্ন পাওয়া যায়নি।");
+        return;
+      }
+
+      activeExamQuestions = shuffleArray(masterQuestions).map(q => {
+        const correctOptText = q.options[q.correct];
+        const shuffledOpts = shuffleArray(q.options);
+        const newCorrectIdx = shuffledOpts.indexOf(correctOptText);
+
+        return {
+          id: q.id,
+          text: q.text,
+          options: shuffledOpts,
+          correct: newCorrectIdx
+        };
+      });
+
+      document.getElementById('student-login-card').classList.add('hidden');
+      document.getElementById('student-test-portal').classList.remove('hidden');
+
+      document.getElementById('exam-display-title').innerText = document.getElementById('cfg-title').value;
+      document.getElementById('std-display-info').innerText = `${name} (শ্রেণি: ${studentClass} | রোল: ${studentRoll})`;
+
+      timeRemainingSeconds = parseInt(document.getElementById('cfg-duration').value || "10") * 60;
+      startTimer();
+      renderQuestion();
+      renderPalette();
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeRemainingSeconds--;
+        const mins = Math.floor(timeRemainingSeconds / 60);
+        const secs = timeRemainingSeconds % 60;
+        document.getElementById('timer-display').innerText = 
+          `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+        if (timeRemainingSeconds <= 0) {
+          clearInterval(timerInterval);
+          alert("সময় শেষ! আপনার পরীক্ষা স্বয়ংক্রিয়ভাবে জমা হয়ে গেছে।");
+          submitExam();
+        }
+      }, 1000);
+    }
+
+    function renderQuestion() {
+      const q = activeExamQuestions[currentQuestionIdx];
+      document.getElementById('question-number-badge').innerText = `প্রশ্ন ${currentQuestionIdx + 1} / ${activeExamQuestions.length}`;
+      document.getElementById('question-text').innerText = q.text;
+
+      const optsContainer = document.getElementById('options-container');
+      optsContainer.innerHTML = '';
+
+      const banglaLabels = ['ক', 'খ', 'গ', 'ঘ'];
+      q.options.forEach((optText, optIdx) => {
+        const isSelected = studentAnswers[currentQuestionIdx] === optIdx;
+        const btn = document.createElement('button');
+        btn.className = `w-full text-left p-3 rounded-lg border text-sm transition flex items-center justify-between ${
+          isSelected ? 'bg-indigo-50 border-indigo-500 font-semibold text-indigo-900' : 'bg-white border-slate-200 hover:bg-slate-50'
+        }`;
+        btn.onclick = () => selectOption(optIdx);
+        btn.innerHTML = `<span>${banglaLabels[optIdx]}. ${optText}</span>`;
+        optsContainer.appendChild(btn);
+      });
+
+      document.getElementById('flag-btn').innerText = flaggedQuestions[currentQuestionIdx] ? "★ চিহ্নিত" : "⚐ পরবর্তীতে দেখার জন্য চিহ্নিত করুন";
+      document.getElementById('flag-btn').className = flaggedQuestions[currentQuestionIdx] ? "text-xs font-bold text-amber-600" : "text-xs font-medium text-slate-400 hover:text-amber-600";
+    }
+
+    function selectOption(optIdx) {
+      studentAnswers[currentQuestionIdx] = optIdx;
+      renderQuestion();
+      renderPalette();
+    }
+
+    function toggleFlagCurrentQuestion() {
+      flaggedQuestions[currentQuestionIdx] = !flaggedQuestions[currentQuestionIdx];
+      renderQuestion();
+      renderPalette();
+    }
+
+    function navigateQuestion(step) {
+      const nextIdx = currentQuestionIdx + step;
+      if (nextIdx >= 0 && nextIdx < activeExamQuestions.length) {
+        currentQuestionIdx = nextIdx;
+        renderQuestion();
+      }
+    }
+
+    function renderPalette() {
+      const grid = document.getElementById('palette-grid');
+      grid.innerHTML = '';
+      activeExamQuestions.forEach((_, idx) => {
+        const isAnswered = studentAnswers.hasOwnProperty(idx);
+        const isFlagged = flaggedQuestions[idx];
+
+        let bgClass = "bg-slate-100 text-slate-700";
+        if (isAnswered) bgClass = "bg-indigo-600 text-white";
+        if (isFlagged) bgClass = "bg-amber-500 text-white";
+
+        const btn = document.createElement('button');
+        btn.className = `h-9 w-full rounded font-semibold text-xs transition ${bgClass}`;
+        btn.innerText = idx + 1;
+        btn.onclick = () => {
+          currentQuestionIdx = idx;
+          renderQuestion();
+        };
+        grid.appendChild(btn);
+      });
+    }
+
+    function submitExam() {
+      clearInterval(timerInterval);
+
+      let correctCount = 0;
+      activeExamQuestions.forEach((q, idx) => {
+        if (studentAnswers[idx] === q.correct) {
+          correctCount++;
+        }
+      });
+
+      const total = activeExamQuestions.length;
+      const percentage = Math.round((correctCount / total) * 100);
+      const passMark = parseInt(document.getElementById('cfg-passmark').value || "60");
+      const isPassed = percentage >= passMark;
+
+      const record = {
+        studentName: document.getElementById('std-name').value,
+        studentClass: document.getElementById('std-class').value,
+        studentRoll: document.getElementById('std-roll').value,
+        studentContact: document.getElementById('std-contact').value,
+        score: `${correctCount} / ${total}`,
+        percentage: `${percentage}%`,
+        status: isPassed ? 'PASSED' : 'FAILED',
+        submittedAt: new Date().toLocaleString()
+      };
+
+      if (isCloudConnected && db) {
+        db.collection("exam_results").add(record)
+          .catch(err => console.error("Error writing to Firestore:", err));
+      } else {
+        const existing = JSON.parse(localStorage.getItem('nexus_exam_results') || '[]');
+        existing.push(record);
+        localStorage.setItem('nexus_exam_results', JSON.stringify(existing));
+      }
+
+      document.getElementById('student-test-portal').classList.add('hidden');
+      document.getElementById('student-scorecard').classList.remove('hidden');
+
+      document.getElementById('final-score').innerText = record.score;
+      document.getElementById('final-percentage').innerText = record.percentage;
+
+      const badge = document.getElementById('pass-fail-badge');
+      badge.innerText = isPassed ? 'উত্তীর্ণ (PASSED)' : 'অনুত্তীর্ণ (FAILED)';
+      badge.className = isPassed 
+        ? "inline-block px-4 py-1.5 rounded-full font-bold text-sm bg-emerald-100 text-emerald-800"
+        : "inline-block px-4 py-1.5 rounded-full font-bold text-sm bg-red-100 text-red-800";
+    }
+
+    function syncResultsFromCloud() {
+      const tbody = document.getElementById('results-table-body');
+
+      if (isCloudConnected && db) {
+        db.collection("exam_results").get().then((querySnapshot) => {
+          tbody.innerHTML = '';
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            appendRowToTable(tbody, data);
+          });
+        });
+      } else {
+        const localData = JSON.parse(localStorage.getItem('nexus_exam_results') || '[]');
+        if (localData.length === 0) return;
+        tbody.innerHTML = '';
+        localData.forEach(data => appendRowToTable(tbody, data));
+      }
+    }
+
+    function appendRowToTable(tbody, data) {
+      const tr = document.createElement('tr');
+      tr.className = "border-b hover:bg-slate-50";
+      tr.innerHTML = `
+        <td class="p-3 font-semibold text-slate-800">${data.studentName}</td>
+        <td class="p-3 text-slate-600">${data.studentClass || '-'}</td>
+        <td class="p-3 text-slate-600 font-medium">${data.studentRoll || '-'}</td>
+        <td class="p-3 text-slate-600 font-medium">${data.studentContact || '-'}</td>
+        <td class="p-3 text-slate-800 font-medium">${data.score}</td>
+        <td class="p-3 text-slate-800 font-medium">${data.percentage}</td>
+        <td class="p-3">
+          <span class="text-xs font-bold px-2 py-0.5 rounded ${data.status === 'PASSED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">
+            ${data.status}
+          </span>
+        </td>
+        <td class="p-3 text-xs text-slate-400">${data.submittedAt}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexus Secure Exam Portal</title>
+  <title>GonitShala Exam Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -16,6 +16,13 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
   <style>
+    /* Prevent text selection and copying globally during exam */
+    body {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
     @media print {
       body * { visibility: hidden; }
       #printable-results, #printable-results * { visibility: visible; }
@@ -23,13 +30,13 @@
     }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen" oncontextmenu="return false;">
 
   <header class="bg-indigo-600 text-white shadow-md p-4 sticky top-0 z-50">
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
       <div class="flex items-center space-x-3">
         <img id="header-logo" src="/images/logo.jpeg" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-lg p-1 shadow">
-        <h1 class="text-xl font-bold tracking-wide">Gonit Shala Exam Portal</h1>
+        <h1 class="text-xl font-bold tracking-wide">GonitShala Exam Portal</h1>
       </div>
       <div>
         <span id="cloud-status" class="text-xs bg-indigo-700 px-3 py-1 rounded-full text-indigo-200">
@@ -78,7 +85,7 @@
         </div>
       </div>
 
-      <!-- CRUD Whitelist Manager & Retake Permissions -->
+      <!-- CRUD Whitelist Manager & Retake Control -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
         <h2 class="text-lg font-bold text-slate-900">2. Student Whitelist & Retake Control</h2>
         <div class="flex flex-col sm:flex-row gap-2">
@@ -90,7 +97,7 @@
         </div>
         <div>
           <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Authorized Numbers & Permissions</h3>
-          <div id="whitelist-container" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-slate-50"></div>
+          <div id="whitelist-container" class="flex flex-col gap-2 max-h-48 overflow-y-auto p-2 border rounded-lg bg-slate-50"></div>
         </div>
       </div>
 
@@ -250,14 +257,15 @@
 
   <script>
     const firebaseConfig = {
-  	apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
+      	apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
   	authDomain: "gonitshala-5a622.firebaseapp.com",
-  	projectId: "gonitshala-5a622",
+ 	projectId: "gonitshala-5a622",
   	storageBucket: "gonitshala-5a622.firebasestorage.app",
   	messagingSenderId: "492965096585",
   	appId: "1:492965096585:web:42f96defa9182162ee2a58",
   	measurementId: "G-JJ0RWNLHR0"
     };
+
     let db = null;
     let isCloudConnected = false;
 
@@ -277,7 +285,7 @@
 
     let masterQuestions = [];
     let savedQuestionSets = [];
-    let whitelistStudents = []; // Stores objects: { contact, allowRetake }
+    let whitelistStudents = []; 
     let activeExamQuestions = []; 
     let currentQuestionIdx = 0;
     let studentAnswers = {};
@@ -289,6 +297,30 @@
       if (window.location.hash === '#admin') {
         promptTeacherLogin();
       }
+      
+      // Anti-Copy & Anti-Inspection event listeners
+      document.addEventListener('copy', (e) => {
+        e.preventDefault();
+        alert("সুরক্ষা সতর্কতা: পরীক্ষার প্রশ্ন কপি করা নিষেধ!");
+      });
+
+      document.addEventListener('cut', (e) => {
+        e.preventDefault();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        // Block F12, Ctrl+Shift+I, Ctrl+Shift+C, Ctrl+U (View Source), Ctrl+C, PrintScreen warning
+        if (
+          e.key === 'F12' ||
+          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'C' || e.key === 'c' || e.key === 'J' || e.key === 'j')) ||
+          (e.ctrlKey && (e.key === 'U' || e.key === 'u' || e.key === 'C' || e.key === 'c')) ||
+          e.key === 'PrintScreen'
+        ) {
+          e.preventDefault();
+          alert("সুরক্ষা সতর্কতা: এই ফিচারটি পরীক্ষার সময় নিষিদ্ধ!");
+          return false;
+        }
+      });
     };
 
     async function manualRefreshAdmin() {
@@ -313,7 +345,6 @@
     }
 
     function applyBranding(cfg) {
-      // Header title remains fixed as "Gonit Shala Exam Portal", only exam title changes in student portal title
       if (cfg.title) {
         document.getElementById('login-portal-title').innerText = cfg.title;
       }
@@ -342,6 +373,15 @@
       allowRetakeChk.checked = false;
     }
 
+    function toggleStudentRetake(num) {
+      const student = whitelistStudents.find(s => s.contact === num);
+      if (student) {
+        student.allowRetake = !student.allowRetake;
+        syncWhitelistToCloud();
+        renderWhitelistUI();
+      }
+    }
+
     function removeWhitelistStudent(num) {
       whitelistStudents = whitelistStudents.filter(s => s.contact !== num);
       syncWhitelistToCloud();
@@ -364,10 +404,25 @@
         return;
       }
       whitelistStudents.forEach(item => {
-        const badge = document.createElement('div');
-        badge.className = "bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 font-medium";
-        badge.innerHTML = `<span>${item.contact} ${item.allowRetake ? '(Retake Allowed)' : ''}</span> <button onclick="removeWhitelistStudent('${item.contact}')" class="text-red-600 font-bold hover:text-red-800">×</button>`;
-        container.appendChild(badge);
+        const row = document.createElement('div');
+        row.className = "flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs";
+        row.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="font-bold text-slate-800">${item.contact}</span>
+            <span class="px-2 py-0.5 rounded font-semibold ${item.allowRetake ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+              ${item.allowRetake ? 'Retake: Allowed' : 'Retake: Locked'}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="toggleStudentRetake('${item.contact}')" class="bg-indigo-50 text-indigo-600 font-semibold px-2.5 py-1 rounded hover:bg-indigo-100 transition">
+              Toggle Retake
+            </button>
+            <button onclick="removeWhitelistStudent('${item.contact}')" class="bg-red-50 text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100 transition">
+              Remove
+            </button>
+          </div>
+        `;
+        container.appendChild(row);
       });
     }
 
@@ -458,7 +513,6 @@
       if (localWhitelist) {
         try { 
           const parsed = JSON.parse(localWhitelist);
-          // Support migration from string array to object array
           whitelistStudents = parsed.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
         } catch(e) { whitelistStudents = []; }
       }
@@ -630,14 +684,12 @@
         } catch(e) {}
       }
 
-      // Whitelist check
       const studentRecord = activeWhitelist.find(s => s.contact === contact);
       if (activeWhitelist.length > 0 && !studentRecord) {
         alert("প্রবেশাধিকার সংরক্ষিত: আপনার নম্বরটি অনুমোদিত নয়।");
         return;
       }
 
-      // Check if student already submitted this exam and retake is NOT allowed
       if (isCloudConnected && db) {
         try {
           const querySnapshot = await db.collection("exam_results")

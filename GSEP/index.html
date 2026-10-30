@@ -29,7 +29,7 @@
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
       <div class="flex items-center space-x-3">
         <img id="header-logo" src="/images/logo.jpeg" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-lg p-1 shadow">
-        <h1 id="header-title" class="text-xl font-bold tracking-wide">Gonit Shala Exam Portal</h1>
+        <h1 class="text-xl font-bold tracking-wide">Gonit Shala Exam Portal</h1>
       </div>
       <div>
         <span id="cloud-status" class="text-xs bg-indigo-700 px-3 py-1 rounded-full text-indigo-200">
@@ -44,7 +44,12 @@
     <!-- TEACHER DASHBOARD -->
     <section id="teacher-view" class="hidden space-y-6">
       <div class="flex justify-between items-center bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-        <span class="text-sm font-bold text-indigo-900">🔒 Teacher Admin Panel</span>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-bold text-indigo-900">🔒 Teacher Admin Panel</span>
+          <button onclick="manualRefreshAdmin()" class="text-xs bg-indigo-600 text-white font-semibold px-3 py-1.5 rounded hover:bg-indigo-700 transition">
+            ↻ Refresh Panel Data
+          </button>
+        </div>
         <button onclick="logoutTeacher()" class="text-xs bg-red-600 text-white font-semibold px-3 py-1.5 rounded hover:bg-red-700">
           Exit to Student View
         </button>
@@ -73,15 +78,18 @@
         </div>
       </div>
 
-      <!-- CRUD Whitelist Manager -->
+      <!-- CRUD Whitelist Manager & Retake Permissions -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        <h2 class="text-lg font-bold text-slate-900">2. Student Whitelist Manager (CRUD)</h2>
-        <div class="flex gap-2">
+        <h2 class="text-lg font-bold text-slate-900">2. Student Whitelist & Retake Control</h2>
+        <div class="flex flex-col sm:flex-row gap-2">
           <input type="text" id="new-whitelist-number" placeholder="Enter student phone number (e.g. 01711111111)" class="flex-1 border rounded-lg p-2 text-sm border-slate-300">
-          <button onclick="addWhitelistNumber()" class="bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700">Add Number</button>
+          <label class="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-2 border rounded-lg">
+            <input type="checkbox" id="new-allow-retake" class="w-4 h-4 text-indigo-600 rounded"> Allow Retake
+          </label>
+          <button onclick="addWhitelistNumber()" class="bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700">Add Student</button>
         </div>
         <div>
-          <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Authorized Numbers List</h3>
+          <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Authorized Numbers & Permissions</h3>
           <div id="whitelist-container" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-slate-50"></div>
         </div>
       </div>
@@ -241,7 +249,7 @@
   </main>
 
   <script>
-  const firebaseConfig = {
+    const firebaseConfig = {
   	apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
   	authDomain: "gonitshala-5a622.firebaseapp.com",
   	projectId: "gonitshala-5a622",
@@ -250,7 +258,6 @@
   	appId: "1:492965096585:web:42f96defa9182162ee2a58",
   	measurementId: "G-JJ0RWNLHR0"
     };
-
     let db = null;
     let isCloudConnected = false;
 
@@ -259,7 +266,7 @@
         firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
         isCloudConnected = true;
-        document.getElementById('cloud-status').innerText = "Cloud Sync: Connected (Firebase)";
+        document.getElementById('cloud-status').innerText = "Cloud Sync: Connected";
         document.getElementById('cloud-status').className = "text-xs bg-emerald-700 px-3 py-1 rounded-full text-emerald-100";
       }
     } catch (e) {
@@ -270,11 +277,10 @@
 
     let masterQuestions = [];
     let savedQuestionSets = [];
-    let whitelistNumbers = [];
+    let whitelistStudents = []; // Stores objects: { contact, allowRetake }
     let activeExamQuestions = []; 
     let currentQuestionIdx = 0;
     let studentAnswers = {};
-    let flaggedQuestions = {};
     let timerInterval = null;
     let timeRemainingSeconds = 0;
 
@@ -284,6 +290,12 @@
         promptTeacherLogin();
       }
     };
+
+    async function manualRefreshAdmin() {
+      await loadSavedData();
+      syncResultsFromCloud();
+      alert("Admin panel data refreshed successfully!");
+    }
 
     function saveConfig() {
       const config = {
@@ -301,8 +313,8 @@
     }
 
     function applyBranding(cfg) {
+      // Header title remains fixed as "Gonit Shala Exam Portal", only exam title changes in student portal title
       if (cfg.title) {
-        document.getElementById('header-title').innerText = cfg.title;
         document.getElementById('login-portal-title').innerText = cfg.title;
       }
       if (cfg.logo) {
@@ -313,26 +325,33 @@
 
     function addWhitelistNumber() {
       const input = document.getElementById('new-whitelist-number');
+      const allowRetakeChk = document.getElementById('new-allow-retake');
       const num = input.value.trim();
       if (!num) return;
-      if (!whitelistNumbers.includes(num)) {
-        whitelistNumbers.push(num);
-        syncWhitelistToCloud();
-        renderWhitelistUI();
+
+      const existingIdx = whitelistStudents.findIndex(s => s.contact === num);
+      if (existingIdx >= 0) {
+        whitelistStudents[existingIdx].allowRetake = allowRetakeChk.checked;
+      } else {
+        whitelistStudents.push({ contact: num, allowRetake: allowRetakeChk.checked });
       }
+
+      syncWhitelistToCloud();
+      renderWhitelistUI();
       input.value = '';
+      allowRetakeChk.checked = false;
     }
 
-    function removeWhitelistNumber(num) {
-      whitelistNumbers = whitelistNumbers.filter(n => n !== num);
+    function removeWhitelistStudent(num) {
+      whitelistStudents = whitelistStudents.filter(s => s.contact !== num);
       syncWhitelistToCloud();
       renderWhitelistUI();
     }
 
     function syncWhitelistToCloud() {
-      localStorage.setItem('nexus_whitelist', JSON.stringify(whitelistNumbers));
+      localStorage.setItem('nexus_whitelist', JSON.stringify(whitelistStudents));
       if (isCloudConnected && db) {
-        db.collection("exam_settings").doc("config").set({ whitelistArray: whitelistNumbers }, { merge: true })
+        db.collection("exam_settings").doc("config").set({ whitelistArray: whitelistStudents }, { merge: true })
           .catch(err => console.error(err));
       }
     }
@@ -340,14 +359,14 @@
     function renderWhitelistUI() {
       const container = document.getElementById('whitelist-container');
       container.innerHTML = '';
-      if (whitelistNumbers.length === 0) {
-        container.innerHTML = `<span class="text-xs text-slate-400 p-2">No whitelisted numbers added yet.</span>`;
+      if (whitelistStudents.length === 0) {
+        container.innerHTML = `<span class="text-xs text-slate-400 p-2">No whitelisted students added yet.</span>`;
         return;
       }
-      whitelistNumbers.forEach(num => {
+      whitelistStudents.forEach(item => {
         const badge = document.createElement('div');
         badge.className = "bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-1.5 rounded-full flex items-center gap-2 font-medium";
-        badge.innerHTML = `<span>${num}</span> <button onclick="removeWhitelistNumber('${num}')" class="text-red-600 font-bold hover:text-red-800">×</button>`;
+        badge.innerHTML = `<span>${item.contact} ${item.allowRetake ? '(Retake Allowed)' : ''}</span> <button onclick="removeWhitelistStudent('${item.contact}')" class="text-red-600 font-bold hover:text-red-800">×</button>`;
         container.appendChild(badge);
       });
     }
@@ -437,7 +456,11 @@
 
       const localWhitelist = localStorage.getItem('nexus_whitelist');
       if (localWhitelist) {
-        try { whitelistNumbers = JSON.parse(localWhitelist); } catch(e) { whitelistNumbers = []; }
+        try { 
+          const parsed = JSON.parse(localWhitelist);
+          // Support migration from string array to object array
+          whitelistStudents = parsed.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
+        } catch(e) { whitelistStudents = []; }
       }
       renderWhitelistUI();
 
@@ -459,8 +482,8 @@
             applyBranding(data);
 
             if (data.whitelistArray) {
-              whitelistNumbers = data.whitelistArray;
-              localStorage.setItem('nexus_whitelist', JSON.stringify(whitelistNumbers));
+              whitelistStudents = data.whitelistArray.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
+              localStorage.setItem('nexus_whitelist', JSON.stringify(whitelistStudents));
               renderWhitelistUI();
             }
           }
@@ -584,7 +607,7 @@
         return;
       }
 
-      let activeWhitelist = [...whitelistNumbers];
+      let activeWhitelist = [...whitelistStudents];
       let examTitle = document.getElementById('cfg-title').value;
       let examDuration = parseInt(document.getElementById('cfg-duration').value || "10");
 
@@ -593,7 +616,9 @@
           const doc = await db.collection("exam_settings").doc("config").get();
           if (doc.exists) {
             const data = doc.data();
-            if (data.whitelistArray) activeWhitelist = data.whitelistArray;
+            if (data.whitelistArray) {
+              activeWhitelist = data.whitelistArray.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
+            }
             if (data.title) examTitle = data.title;
             if (data.duration) examDuration = parseInt(data.duration);
           }
@@ -605,9 +630,35 @@
         } catch(e) {}
       }
 
-      if (activeWhitelist.length > 0 && !activeWhitelist.includes(contact)) {
+      // Whitelist check
+      const studentRecord = activeWhitelist.find(s => s.contact === contact);
+      if (activeWhitelist.length > 0 && !studentRecord) {
         alert("প্রবেশাধিকার সংরক্ষিত: আপনার নম্বরটি অনুমোদিত নয়।");
         return;
+      }
+
+      // Check if student already submitted this exam and retake is NOT allowed
+      if (isCloudConnected && db) {
+        try {
+          const querySnapshot = await db.collection("exam_results")
+            .where("examName", "==", examTitle)
+            .where("studentContact", "==", contact)
+            .get();
+          
+          if (!querySnapshot.empty && (!studentRecord || !studentRecord.allowRetake)) {
+            alert("আপনি ইতিপূর্বে এই পরীক্ষায় অংশগ্রহণ করেছেন। অ্যাডমিন থেকে পুনরায় পরীক্ষা দেওয়ার অনুমতি (Retake) দেওয়া হয়নি।");
+            return;
+          }
+        } catch(e) {
+          console.warn("Retake check error", e);
+        }
+      } else {
+        const localResults = JSON.parse(localStorage.getItem('nexus_exam_results') || '[]');
+        const alreadyTaken = localResults.some(r => r.examName === examTitle && r.studentContact === contact);
+        if (alreadyTaken && (!studentRecord || !studentRecord.allowRetake)) {
+          alert("আপনি ইতিপূর্বে এই পরীক্ষায় অংশগ্রহণ করেছেন এবং রিটেক অনুমোদিত নয়।");
+          return;
+        }
       }
 
       if (masterQuestions.length === 0) {

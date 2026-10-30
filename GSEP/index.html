@@ -29,7 +29,7 @@
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
       <div class="flex items-center space-x-3">
         <img id="header-logo" src="/images/logo.jpeg" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-lg p-1 shadow">
-        <h1 id="header-title" class="text-xl font-bold tracking-wide">Nexus Secure Exam Portal</h1>
+        <h1 id="header-title" class="text-xl font-bold tracking-wide">Gonit Shala Exam Portal</h1>
       </div>
       <div>
         <span id="cloud-status" class="text-xs bg-indigo-700 px-3 py-1 rounded-full text-indigo-200">
@@ -55,7 +55,7 @@
         <h2 class="text-lg font-bold text-slate-900">1. Exam Configuration & Branding</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Exam Title (Paper Name)</label>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Active Exam Title</label>
             <input type="text" id="cfg-title" value="General Knowledge Quiz" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
           </div>
           <div>
@@ -82,9 +82,7 @@
         </div>
         <div>
           <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Authorized Numbers List</h3>
-          <div id="whitelist-container" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-slate-50">
-            <!-- Whitelist badges populated dynamically -->
-          </div>
+          <div id="whitelist-container" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-slate-50"></div>
         </div>
       </div>
 
@@ -117,7 +115,7 @@
         </button>
       </div>
 
-      <!-- Submissions Log & PDF Download -->
+      <!-- Submissions Log -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h2 class="text-lg font-bold text-slate-900">4. Exam-wise Submissions & PDF Export</h2>
@@ -243,10 +241,10 @@
   </main>
 
   <script>
-    const firebaseConfig = {
+  const firebaseConfig = {
   	apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
   	authDomain: "gonitshala-5a622.firebaseapp.com",
- 	projectId: "gonitshala-5a622",
+  	projectId: "gonitshala-5a622",
   	storageBucket: "gonitshala-5a622.firebasestorage.app",
   	messagingSenderId: "492965096585",
   	appId: "1:492965096585:web:42f96defa9182162ee2a58",
@@ -305,7 +303,7 @@
     function applyBranding(cfg) {
       if (cfg.title) {
         document.getElementById('header-title').innerText = cfg.title;
-        document.getElementById('login-portal-title').innerText = cfg.title + " - Student Portal";
+        document.getElementById('login-portal-title').innerText = cfg.title;
       }
       if (cfg.logo) {
         document.getElementById('header-logo').src = cfg.logo;
@@ -313,7 +311,6 @@
       }
     }
 
-    // --- CRUD Whitelist Functions ---
     function addWhitelistNumber() {
       const input = document.getElementById('new-whitelist-number');
       const num = input.value.trim();
@@ -355,7 +352,6 @@
       });
     }
 
-    // --- Reusable Question Sets ---
     function saveQuestions() {
       localStorage.setItem('nexus_question_bank', JSON.stringify(masterQuestions));
       renderTeacherQuestions();
@@ -428,7 +424,7 @@
       }
     }
 
-    function loadSavedData() {
+    async function loadSavedData() {
       const savedConfig = localStorage.getItem('nexus_exam_config');
       if (savedConfig) {
         const cfg = JSON.parse(savedConfig);
@@ -452,38 +448,47 @@
       renderQuestionSetsList();
 
       if (isCloudConnected && db) {
-        db.collection("exam_settings").doc("config").get().then((doc) => {
-          if (doc.exists) {
-            const data = doc.data();
+        try {
+          const docConfig = await db.collection("exam_settings").doc("config").get();
+          if (docConfig.exists) {
+            const data = docConfig.data();
+            if (data.title) document.getElementById('cfg-title').value = data.title;
+            if (data.duration) document.getElementById('cfg-duration').value = data.duration;
+            if (data.passmark) document.getElementById('cfg-passmark').value = data.passmark;
+            if (data.logo) document.getElementById('cfg-logo').value = data.logo;
+            applyBranding(data);
+
             if (data.whitelistArray) {
               whitelistNumbers = data.whitelistArray;
               localStorage.setItem('nexus_whitelist', JSON.stringify(whitelistNumbers));
               renderWhitelistUI();
             }
           }
-        });
 
-        db.collection("exam_settings").doc("questions").get().then((doc) => {
-          if (doc.exists && doc.data().questions) {
-            masterQuestions = doc.data().questions;
+          const docQ = await db.collection("exam_settings").doc("questions").get();
+          if (docQ.exists && docQ.data().questions && docQ.data().questions.length > 0) {
+            masterQuestions = docQ.data().questions;
+            localStorage.setItem('nexus_question_bank', JSON.stringify(masterQuestions));
             renderTeacherQuestions();
           }
-        });
 
-        db.collection("exam_settings").doc("all_sets").get().then((doc) => {
-          if (doc.exists && doc.data().sets) {
-            savedQuestionSets = doc.data().sets;
+          const docSets = await db.collection("exam_settings").doc("all_sets").get();
+          if (docSets.exists && docSets.data().sets) {
+            savedQuestionSets = docSets.data().sets;
             renderQuestionSetsList();
           }
-        });
+        } catch(e) {
+          console.warn("Cloud load fallback to local", e);
+        }
       }
 
-      const savedQuestions = localStorage.getItem('nexus_question_bank');
-      if (savedQuestions && masterQuestions.length === 0) {
-        try { masterQuestions = JSON.parse(savedQuestions); } catch(e) { masterQuestions = []; }
+      if (masterQuestions.length === 0) {
+        const savedQuestions = localStorage.getItem('nexus_question_bank');
+        if (savedQuestions) {
+          try { masterQuestions = JSON.parse(savedQuestions); } catch(e) { masterQuestions = []; }
+        }
       }
-      if (masterQuestions.length === 0) loadSampleQuestions();
-      else renderTeacherQuestions();
+      renderTeacherQuestions();
     }
 
     function promptTeacherLogin() {
@@ -504,16 +509,13 @@
       document.getElementById('student-view').classList.remove('hidden');
     }
 
-    function loadSampleQuestions() {
-      masterQuestions = [
-        { id: 1, text: "বাংলাদেশের রাজধানী কোথায়?", options: ["ঢাকা", "চট্টগ্রাম", "সিলেট", "খুলনা"], correct: 0 }
-      ];
-      saveQuestions();
-    }
-
     function renderTeacherQuestions() {
       const container = document.getElementById('question-list');
       container.innerHTML = '';
+      if (masterQuestions.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 p-2">No active questions loaded.</p>`;
+        return;
+      }
       masterQuestions.forEach((q, idx) => {
         const item = document.createElement('div');
         item.className = "p-3 bg-slate-50 border rounded-lg text-sm flex justify-between items-center";
@@ -557,7 +559,7 @@
         };
         reader.readAsText(file);
       } else {
-        alert("Please upload a .json question file or use sample.");
+        alert("Please upload a .json question file.");
         statusEl.classList.add('hidden');
       }
     }
@@ -582,13 +584,23 @@
         return;
       }
 
-      // Verify Whitelist
       let activeWhitelist = [...whitelistNumbers];
+      let examTitle = document.getElementById('cfg-title').value;
+      let examDuration = parseInt(document.getElementById('cfg-duration').value || "10");
+
       if (isCloudConnected && db) {
         try {
           const doc = await db.collection("exam_settings").doc("config").get();
-          if (doc.exists && doc.data().whitelistArray) {
-            activeWhitelist = doc.data().whitelistArray;
+          if (doc.exists) {
+            const data = doc.data();
+            if (data.whitelistArray) activeWhitelist = data.whitelistArray;
+            if (data.title) examTitle = data.title;
+            if (data.duration) examDuration = parseInt(data.duration);
+          }
+
+          const qDoc = await db.collection("exam_settings").doc("questions").get();
+          if (qDoc.exists && qDoc.data().questions && qDoc.data().questions.length > 0) {
+            masterQuestions = qDoc.data().questions;
           }
         } catch(e) {}
       }
@@ -599,7 +611,7 @@
       }
 
       if (masterQuestions.length === 0) {
-        alert("কোনো প্রশ্ন পাওয়া যায়নি।");
+        alert("কোনো প্রশ্ন পাওয়া যায়নি! অ্যাডমিন থেকে প্রশ্ন লোড করুন।");
         return;
       }
 
@@ -611,10 +623,10 @@
 
       document.getElementById('student-login-card').classList.add('hidden');
       document.getElementById('student-test-portal').classList.remove('hidden');
-      document.getElementById('exam-display-title').innerText = document.getElementById('cfg-title').value;
-      document.getElementById('std-display-info').innerText = `${name} (Roll: ${studentRoll})`;
+      document.getElementById('exam-display-title').innerText = examTitle;
+      document.getElementById('std-display-info').innerText = `${name} (Class: ${studentClass} | Roll: ${studentRoll})`;
 
-      timeRemainingSeconds = parseInt(document.getElementById('cfg-duration').value || "10") * 60;
+      timeRemainingSeconds = examDuration * 60;
       startTimer();
       renderQuestion();
       renderPalette();
@@ -627,7 +639,7 @@
         const mins = Math.floor(timeRemainingSeconds / 60);
         const secs = timeRemainingSeconds % 60;
         document.getElementById('timer-display').innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        if (timeRemainingSeconds <= 0) { clearInterval(timerInterval); submitExam(); }
+        if (timeRemainingSeconds <= 0) { clearInterval(timerInterval); alert("সময় শেষ!"); submitExam(); }
       }, 1000);
     }
 
@@ -642,7 +654,7 @@
       q.options.forEach((optText, optIdx) => {
         const isSelected = studentAnswers[currentQuestionIdx] === optIdx;
         const btn = document.createElement('button');
-        btn.className = `w-full text-left p-3 rounded-lg border text-sm transition ${isSelected ? 'bg-indigo-50 border-indigo-500 font-semibold' : 'bg-white border-slate-200'}`;
+        btn.className = `w-full text-left p-3 rounded-lg border text-sm transition ${isSelected ? 'bg-indigo-50 border-indigo-500 font-semibold text-indigo-900' : 'bg-white border-slate-200'}`;
         btn.onclick = () => { studentAnswers[currentQuestionIdx] = optIdx; renderQuestion(); renderPalette(); };
         btn.innerHTML = `<span>${labels[optIdx]}. ${optText}</span>`;
         optsContainer.appendChild(btn);

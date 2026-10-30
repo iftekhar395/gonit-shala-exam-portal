@@ -16,12 +16,15 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
   <style>
-    /* Prevent text selection and copying globally during exam */
+    /* Prevent text selection, copying, and mobile screenshot watermarking/blurring overlay */
     body {
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
       user-select: none;
+    }
+    #student-test-portal {
+      -webkit-touch-callout: none;
     }
     @media print {
       body * { visibility: hidden; }
@@ -125,7 +128,7 @@
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <h2 class="text-lg font-bold text-slate-900 mb-4">Active Question Bank Preview</h2>
         <div id="question-list" class="space-y-3 mb-4 max-h-96 overflow-y-auto"></div>
-        <button onclick="addQuestionField()" class="w-full border-2 border-dashed border-indigo-200 text-indigo-600 font-semibold py-3 rounded-xl hover:bg-indigo-50/50 transition text-sm">
+        <button onclick="openManualQuestionModal()" class="w-full border-2 border-dashed border-indigo-200 text-indigo-600 font-semibold py-3 rounded-xl hover:bg-indigo-50/50 transition text-sm">
           + Add New Question Manually
         </button>
       </div>
@@ -213,7 +216,14 @@
             </div>
           </div>
 
-          <div id="question-card" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div id="question-card" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 relative overflow-hidden">
+            <!-- Mobile Screenshot Deterrence Overlay -->
+            <div id="screenshot-overlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm text-white flex flex-col items-center justify-center p-6 text-center hidden z-30 pointer-events-none">
+              <span class="text-3xl mb-2">⚠️</span>
+              <h3 class="font-bold text-lg mb-1">সতর্কবার্তা</h3>
+              <p class="text-xs text-slate-300">পরীক্ষার সময় স্ক্রিনশট বা ক্যাপচার করা সম্পূর্ণ নিষিদ্ধ!</p>
+            </div>
+
             <div class="flex justify-between items-center">
               <span id="question-number-badge" class="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded">Question 1</span>
               <button onclick="toggleFlagCurrentQuestion()" id="flag-btn" class="text-xs font-medium text-slate-400 hover:text-amber-600">⚐ Flag</button>
@@ -254,6 +264,40 @@
     </section>
 
   </main>
+
+  <!-- MANUAL QUESTION MODAL -->
+  <div id="manual-q-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl max-w-lg w-full shadow-xl space-y-4">
+      <h3 class="text-lg font-bold text-slate-900">Add Question Manually</h3>
+      <div>
+        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Question Prompt</label>
+        <textarea id="m-q-text" rows="2" class="w-full border rounded-lg p-2 text-sm border-slate-300"></textarea>
+      </div>
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold uppercase text-slate-500">Options & Correct Answer Select</label>
+        <div class="flex items-center gap-2">
+          <input type="radio" name="correct-opt" value="0" checked class="w-4 h-4 text-indigo-600">
+          <input type="text" id="m-opt-0" placeholder="Option A" class="flex-1 border rounded-lg p-2 text-sm border-slate-300">
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="radio" name="correct-opt" value="1" class="w-4 h-4 text-indigo-600">
+          <input type="text" id="m-opt-1" placeholder="Option B" class="flex-1 border rounded-lg p-2 text-sm border-slate-300">
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="radio" name="correct-opt" value="2" class="w-4 h-4 text-indigo-600">
+          <input type="text" id="m-opt-2" placeholder="Option C" class="flex-1 border rounded-lg p-2 text-sm border-slate-300">
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="radio" name="correct-opt" value="3" class="w-4 h-4 text-indigo-600">
+          <input type="text" id="m-opt-3" placeholder="Option D" class="flex-1 border rounded-lg p-2 text-sm border-slate-300">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeManualQuestionModal()" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200">Cancel</button>
+        <button onclick="saveManualQuestion()" class="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700">Save Question</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const firebaseConfig = {
@@ -309,7 +353,6 @@
       });
 
       document.addEventListener('keydown', (e) => {
-        // Block F12, Ctrl+Shift+I, Ctrl+Shift+C, Ctrl+U (View Source), Ctrl+C, PrintScreen warning
         if (
           e.key === 'F12' ||
           (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'C' || e.key === 'c' || e.key === 'J' || e.key === 'j')) ||
@@ -317,11 +360,29 @@
           e.key === 'PrintScreen'
         ) {
           e.preventDefault();
+          triggerScreenshotWarning();
           alert("সুরক্ষা সতর্কতা: এই ফিচারটি পরীক্ষার সময় নিষিদ্ধ!");
           return false;
         }
       });
+
+      // Mobile / Browser Visibility Change & Screenshot gesture detection (Page blur / hiding)
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && document.getElementById('student-test-portal') && !document.getElementById('student-test-portal').classList.contains('hidden')) {
+          triggerScreenshotWarning();
+        }
+      });
     };
+
+    function triggerScreenshotWarning() {
+      const overlay = document.getElementById('screenshot-overlay');
+      if (overlay) {
+        overlay.classList.remove('hidden');
+        setTimeout(() => {
+          overlay.classList.add('hidden');
+        }, 2500);
+      }
+    }
 
     async function manualRefreshAdmin() {
       await loadSavedData();
@@ -596,20 +657,49 @@
       masterQuestions.forEach((q, idx) => {
         const item = document.createElement('div');
         item.className = "p-3 bg-slate-50 border rounded-lg text-sm flex justify-between items-center";
-        item.innerHTML = `<span>Q${idx + 1}: ${q.text}</span> <button onclick="removeQuestion(${idx})" class="text-red-500 text-xs">Remove</button>`;
+        item.innerHTML = `<span>Q${idx + 1}: ${q.text} (Correct: Opt ${parseInt(q.correct) + 1})</span> <button onclick="removeQuestion(${idx})" class="text-red-500 text-xs">Remove</button>`;
         container.appendChild(item);
       });
     }
 
-    function addQuestionField() {
-      const text = prompt("Question Prompt:");
-      if (!text) return;
-      const optA = prompt("Option A:");
-      const optB = prompt("Option B:");
-      const optC = prompt("Option C:");
-      const optD = prompt("Option D:");
-      masterQuestions.push({ id: Date.now(), text, options: [optA, optB, optC, optD], correct: 0 });
+    function openManualQuestionModal() {
+      document.getElementById('m-q-text').value = '';
+      document.getElementById('m-opt-0').value = '';
+      document.getElementById('m-opt-1').value = '';
+      document.getElementById('m-opt-2').value = '';
+      document.getElementById('m-opt-3').value = '';
+      document.querySelector('input[name="correct-opt"][value="0"]').checked = true;
+      document.getElementById('manual-q-modal').classList.remove('hidden');
+    }
+
+    function closeManualQuestionModal() {
+      document.getElementById('manual-q-modal').classList.add('hidden');
+    }
+
+    function saveManualQuestion() {
+      const text = document.getElementById('m-q-text').value.trim();
+      const optA = document.getElementById('m-opt-0').value.trim();
+      const optB = document.getElementById('m-opt-1').value.trim();
+      const optC = document.getElementById('m-opt-2').value.trim();
+      const optD = document.getElementById('m-opt-3').value.trim();
+      const correctRadio = document.querySelector('input[name="correct-opt"]:checked');
+
+      if (!text || !optA || !optB || !optC || !optD) {
+        alert("দয়া করে প্রশ্ন এবং চারটি অপশনই পূরণ করুন।");
+        return;
+      }
+
+      const correctIndex = parseInt(correctRadio ? correctRadio.value : 0);
+
+      masterQuestions.push({
+        id: Date.now(),
+        text: text,
+        options: [optA, optB, optC, optD],
+        correct: correctIndex
+      });
+
       saveQuestions();
+      closeManualQuestionModal();
     }
 
     function removeQuestion(idx) {
@@ -790,7 +880,10 @@
 
       const total = activeExamQuestions.length;
       const percentage = Math.round((correctCount / total) * 100);
-      const passMark = parseInt(document.getElementById('cfg-passmark').value || "60");
+      
+      // Fixed Pass Mark dynamic evaluation from input field
+      const passMarkInput = parseInt(document.getElementById('cfg-passmark').value || "60");
+      const isPassed = percentage >= passMarkInput;
 
       const record = {
         examName: document.getElementById('cfg-title').value,
@@ -800,7 +893,7 @@
         studentContact: document.getElementById('std-contact').value,
         score: `${correctCount} / ${total}`,
         percentage: `${percentage}%`,
-        status: percentage >= passMark ? 'PASSED' : 'FAILED',
+        status: isPassed ? 'PASSED' : 'FAILED',
         submittedAt: new Date().toLocaleString()
       };
 
@@ -816,6 +909,10 @@
       document.getElementById('student-scorecard').classList.remove('hidden');
       document.getElementById('final-score').innerText = record.score;
       document.getElementById('final-percentage').innerText = record.percentage;
+      
+      const badge = document.getElementById('pass-fail-badge');
+      badge.innerText = record.status;
+      badge.className = `inline-block px-4 py-1.5 rounded-full font-bold text-sm ${isPassed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`;
     }
 
     function syncResultsFromCloud() {

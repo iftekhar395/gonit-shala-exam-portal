@@ -16,7 +16,6 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
   <style>
-    /* Prevent text selection, copying, and mobile screenshot watermarking/blurring overlay */
     body {
       -webkit-user-select: none;
       -moz-user-select: none;
@@ -41,11 +40,6 @@
         <img id="header-logo" src="/images/logo.jpeg" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-lg p-1 shadow">
         <h1 class="text-xl font-bold tracking-wide">GonitShala Exam Portal</h1>
       </div>
-      <div>
-        <span id="cloud-status" class="text-xs bg-indigo-700 px-3 py-1 rounded-full text-indigo-200">
-          Cloud Mode: Local Storage
-        </span>
-      </div>
     </div>
   </header>
 
@@ -67,24 +61,30 @@
 
       <!-- Exam Configuration & Branding -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        <h2 class="text-lg font-bold text-slate-900">1. Exam Configuration & Branding</h2>
+        <h2 class="text-lg font-bold text-slate-900">1. Exam Configuration & Targeting</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Active Exam Title</label>
             <input type="text" id="cfg-title" value="General Knowledge Quiz" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
           </div>
           <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Target Class</label>
+            <input type="text" id="cfg-target-class" value="10" placeholder="e.g. 10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
+          <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Duration (Minutes)</label>
             <input type="number" id="cfg-duration" value="10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
           </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pass Mark (%)</label>
             <input type="number" id="cfg-passmark" value="60" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
           </div>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Institution Logo Path</label>
-          <input type="text" id="cfg-logo" value="/images/logo.jpeg" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Institution Logo Path</label>
+            <input type="text" id="cfg-logo" value="/images/logo.jpeg" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
         </div>
       </div>
 
@@ -106,20 +106,23 @@
 
       <!-- Reusable Question Papers Manager -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        <h2 class="text-lg font-bold text-slate-900">3. Reusable Question Paper Manager</h2>
-        <div class="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 p-4 rounded-xl border">
-          <input type="text" id="new-set-name" placeholder="Enter Paper Name" class="w-full sm:w-1/2 border rounded-lg p-2 text-sm border-slate-300 bg-white">
-          <label class="cursor-pointer bg-indigo-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-indigo-700 transition flex items-center gap-1 w-full sm:w-auto justify-center">
-            <span>📁 Upload Question File</span>
-            <input type="file" id="question-file-input" accept=".json,.txt,.csv,.pdf,.jpg,.jpeg,.png" class="hidden" onchange="handleFileUpload(event)">
+        <h2 class="text-lg font-bold text-slate-900">3. Class-wise Question Paper Manager</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center bg-slate-50 p-4 rounded-xl border">
+          <input type="text" id="new-set-name" placeholder="Enter Paper Name" class="border rounded-lg p-2 text-sm border-slate-300 bg-white">
+          <input type="text" id="new-set-class" placeholder="Target Class (e.g. 10)" class="border rounded-lg p-2 text-sm border-slate-300 bg-white">
+          <label class="cursor-pointer bg-indigo-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-indigo-700 transition flex items-center gap-1 justify-center">
+            <span>📁 Upload JSON</span>
+            <input type="file" id="question-file-input" accept=".json" class="hidden" onchange="handleFileUpload(event)">
           </label>
-          <button onclick="saveCurrentAsNewSet()" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-emerald-700 w-full sm:w-auto">
-            Save Current Bank
+        </div>
+        <div class="flex justify-end">
+          <button onclick="saveCurrentAsNewSet()" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-emerald-700">
+            Save Current Bank to Class
           </button>
         </div>
         <div id="ocr-status" class="text-xs text-indigo-600 font-medium hidden"></div>
         <div>
-          <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Saved Question Papers (Click to Load)</h3>
+          <h3 class="text-xs font-bold uppercase text-slate-400 mb-2">Saved Class Papers (Click to Load)</h3>
           <div id="question-sets-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
         </div>
       </div>
@@ -186,7 +189,7 @@
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Class</label>
-              <input type="text" id="std-class" class="w-full border rounded-lg p-3 border-slate-300">
+              <input type="text" id="std-class" placeholder="e.g. 10" class="w-full border rounded-lg p-3 border-slate-300">
             </div>
             <div>
               <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Roll / ID</label>
@@ -217,7 +220,6 @@
           </div>
 
           <div id="question-card" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4 relative overflow-hidden">
-            <!-- Mobile Screenshot Deterrence Overlay -->
             <div id="screenshot-overlay" class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm text-white flex flex-col items-center justify-center p-6 text-center hidden z-30 pointer-events-none">
               <span class="text-3xl mb-2">⚠️</span>
               <h3 class="font-bold text-lg mb-1">সতর্কবার্তা</h3>
@@ -301,13 +303,13 @@
 
   <script>
     const firebaseConfig = {
-      	apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
-  	authDomain: "gonitshala-5a622.firebaseapp.com",
- 	projectId: "gonitshala-5a622",
-  	storageBucket: "gonitshala-5a622.firebasestorage.app",
-  	messagingSenderId: "492965096585",
-  	appId: "1:492965096585:web:42f96defa9182162ee2a58",
-  	measurementId: "G-JJ0RWNLHR0"
+      apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
+  	  authDomain: "gonitshala-5a622.firebaseapp.com",
+ 	    projectId: "gonitshala-5a622",
+  	  storageBucket: "gonitshala-5a622.firebasestorage.app",
+  	  messagingSenderId: "492965096585",
+  	  appId: "1:492965096585:web:42f96defa9182162ee2a58",
+  	  measurementId: "G-JJ0RWNLHR0"
     };
 
     let db = null;
@@ -318,8 +320,6 @@
         firebase.initializeApp(firebaseConfig);
         db = firebase.firestore();
         isCloudConnected = true;
-        document.getElementById('cloud-status').innerText = "Cloud Sync: Connected";
-        document.getElementById('cloud-status').className = "text-xs bg-emerald-700 px-3 py-1 rounded-full text-emerald-100";
       }
     } catch (e) {
       console.warn("Firebase init failed.", e);
@@ -342,7 +342,6 @@
         promptTeacherLogin();
       }
       
-      // Anti-Copy & Anti-Inspection event listeners
       document.addEventListener('copy', (e) => {
         e.preventDefault();
         alert("সুরক্ষা সতর্কতা: পরীক্ষার প্রশ্ন কপি করা নিষেধ!");
@@ -366,7 +365,6 @@
         }
       });
 
-      // Mobile / Browser Visibility Change & Screenshot gesture detection (Page blur / hiding)
       document.addEventListener('visibilitychange', () => {
         if (document.hidden && document.getElementById('student-test-portal') && !document.getElementById('student-test-portal').classList.contains('hidden')) {
           triggerScreenshotWarning();
@@ -393,6 +391,7 @@
     function saveConfig() {
       const config = {
         title: document.getElementById('cfg-title').value,
+        targetClass: document.getElementById('cfg-target-class').value.trim(),
         duration: document.getElementById('cfg-duration').value,
         passmark: document.getElementById('cfg-passmark').value,
         logo: document.getElementById('cfg-logo').value
@@ -497,16 +496,25 @@
 
     function saveCurrentAsNewSet() {
       const setNameInput = document.getElementById('new-set-name');
+      const setClassInput = document.getElementById('new-set-class');
       const setName = setNameInput.value.trim();
-      if (!setName) { alert("Please enter a paper name."); return; }
+      const targetClass = setClassInput.value.trim();
+
+      if (!setName || !targetClass) { alert("Please enter Paper Name and Target Class."); return; }
       if (masterQuestions.length === 0) { alert("No questions to save!"); return; }
 
-      const newSet = { id: 'set_' + Date.now(), name: setName, questions: [...masterQuestions] };
+      const newSet = { 
+        id: 'set_' + Date.now(), 
+        name: setName, 
+        targetClass: targetClass,
+        questions: [...masterQuestions] 
+      };
       savedQuestionSets.push(newSet);
       syncQuestionSetsToCloud();
       renderQuestionSetsList();
       setNameInput.value = '';
-      alert(`Paper "${setName}" saved successfully!`);
+      setClassInput.value = '';
+      alert(`Paper "${setName}" for Class ${targetClass} saved successfully!`);
     }
 
     function syncQuestionSetsToCloud() {
@@ -529,7 +537,8 @@
         card.innerHTML = `
           <div>
             <span class="font-bold text-sm text-slate-800 block truncate">${set.name}</span>
-            <span class="text-xs text-slate-500">${set.questions.length} Questions</span>
+            <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium inline-block my-1">Class: ${set.targetClass || 'All'}</span>
+            <span class="text-xs text-slate-500 block">${set.questions.length} Questions</span>
           </div>
           <div class="flex gap-2 pt-1">
             <button onclick="activateQuestionSet('${set.id}')" class="flex-1 bg-indigo-600 text-white text-xs font-semibold py-1.5 rounded hover:bg-indigo-700">Load</button>
@@ -545,9 +554,10 @@
       if (targetSet) {
         masterQuestions = [...targetSet.questions];
         document.getElementById('cfg-title').value = targetSet.name;
+        document.getElementById('cfg-target-class').value = targetSet.targetClass || "";
         saveConfig();
         saveQuestions();
-        alert(`Loaded paper: "${targetSet.name}"!`);
+        alert(`Loaded paper: "${targetSet.name}" for Class ${targetSet.targetClass}!`);
       }
     }
 
@@ -564,6 +574,7 @@
       if (savedConfig) {
         const cfg = JSON.parse(savedConfig);
         document.getElementById('cfg-title').value = cfg.title || "General Knowledge Quiz";
+        document.getElementById('cfg-target-class').value = cfg.targetClass || "10";
         document.getElementById('cfg-duration').value = cfg.duration || 10;
         document.getElementById('cfg-passmark').value = cfg.passmark || 60;
         document.getElementById('cfg-logo').value = cfg.logo || "/images/logo.jpeg";
@@ -591,6 +602,7 @@
           if (docConfig.exists) {
             const data = docConfig.data();
             if (data.title) document.getElementById('cfg-title').value = data.title;
+            if (data.targetClass) document.getElementById('cfg-target-class').value = data.targetClass;
             if (data.duration) document.getElementById('cfg-duration').value = data.duration;
             if (data.passmark) document.getElementById('cfg-passmark').value = data.passmark;
             if (data.logo) document.getElementById('cfg-logo').value = data.logo;
@@ -754,6 +766,7 @@
       let activeWhitelist = [...whitelistStudents];
       let examTitle = document.getElementById('cfg-title').value;
       let examDuration = parseInt(document.getElementById('cfg-duration').value || "10");
+      let targetClass = document.getElementById('cfg-target-class').value.trim();
 
       if (isCloudConnected && db) {
         try {
@@ -764,6 +777,7 @@
               activeWhitelist = data.whitelistArray.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
             }
             if (data.title) examTitle = data.title;
+            if (data.targetClass) targetClass = data.targetClass;
             if (data.duration) examDuration = parseInt(data.duration);
           }
 
@@ -772,6 +786,11 @@
             masterQuestions = qDoc.data().questions;
           }
         } catch(e) {}
+      }
+
+      if (targetClass && studentClass !== targetClass) {
+        alert(`দুঃখিত! এই পরীক্ষাটি কেবল ক্লাস ${targetClass}-এর শিক্ষার্থীদের জন্য নির্ধারিত।`);
+        return;
       }
 
       const studentRecord = activeWhitelist.find(s => s.contact === contact);
@@ -816,8 +835,8 @@
 
       document.getElementById('student-login-card').classList.add('hidden');
       document.getElementById('student-test-portal').classList.remove('hidden');
-      document.getElementById('exam-display-title').innerText = examTitle;
-      document.getElementById('std-display-info').innerText = `${name} (Class: ${studentClass} | Roll: ${studentRoll})`;
+      document.getElementById('exam-display-title').innerText = `${examTitle} (Class: ${studentClass})`;
+      document.getElementById('std-display-info').innerText = `${name} | Roll: ${studentRoll}`;
 
       timeRemainingSeconds = examDuration * 60;
       startTimer();
@@ -880,8 +899,6 @@
 
       const total = activeExamQuestions.length;
       const percentage = Math.round((correctCount / total) * 100);
-      
-      // Fixed Pass Mark dynamic evaluation from input field
       const passMarkInput = parseInt(document.getElementById('cfg-passmark').value || "60");
       const isPassed = percentage >= passMarkInput;
 

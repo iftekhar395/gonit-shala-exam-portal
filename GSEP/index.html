@@ -333,7 +333,7 @@
     let studentAnswers = {};
     let timerInterval = null;
     let timeRemainingSeconds = 0;
-    let currentStudentSession = null; // Prevent duplicate active submission clicks
+    let currentStudentSession = null; 
 
     window.onload = function() {
       loadSavedData();
@@ -354,7 +354,7 @@
         ) {
           e.preventDefault();
           triggerScreenshotWarning();
-          alert("সুরক্ষা সতর্কতা: এই ফিচারটি পরীক্ষার সময় নিষিদ্ধ!");
+          alert("Surkkha satorkota: Ei feature-ti porikkhar somoy nishiddho!");
           return false;
         }
       });
@@ -686,7 +686,7 @@
       const correctRadio = document.querySelector('input[name="correct-opt"]:checked');
 
       if (!text || !optA || !optB || !optC || !optD) {
-        alert("দয়া করে প্রশ্ন এবং চারটি অপশনই পূরণ করুন।");
+        alert("Doya kore proshno ebong charti option-i puron korun.");
         return;
       }
 
@@ -749,7 +749,7 @@
       const contact = document.getElementById('std-contact').value.trim();
 
       if (!name || !studentClass || !studentRoll || !contact) {
-        alert("দয়া করে সকল তথ্য পূরণ করুন।");
+        alert("Doya kore sokol totho puron korun.");
         return;
       }
 
@@ -791,13 +791,19 @@
       }
 
       const studentRecord = activeWhitelist.find(s => s.contact === contact);
+      if (activeWhitelist.length > 1 && !studentRecord) {
+        // Note: activeWhitelist.length > 1 check is optional, but if whitelist is used we check.
+        // Let's keep direct check: if whitelist has items, enforce it:
+      }
       if (activeWhitelist.length > 0 && !studentRecord) {
-        alert("প্রবেশাধিকার সংরক্ষিত: আপনার নম্বরটি অনুমোদিত নয়।");
+        alert("Probeshadhikar shongrokkhito: Apnar number-ti anumatito noy.");
         return;
       }
 
-      // STRICT CHECK: Check if student already submitted this exam in Cloud or Local storage
+      // Check retake permission specifically using contact number against exam results
       let alreadyTaken = false;
+      let allowRetakeByAdmin = studentRecord ? studentRecord.allowRetake : false;
+
       if (isCloudConnected && db) {
         try {
           const querySnapshot = await db.collection("exam_results")
@@ -816,17 +822,16 @@
         alreadyTaken = localResults.some(r => r.examName === examTitle && r.studentContact === contact);
       }
 
-      if (alreadyTaken && (!studentRecord || !studentRecord.allowRetake)) {
-        alert("আপনি ইতিমধ্যে এই পরীক্ষায় অংশগ্রহণ করেছেন! পুনরায় পরীক্ষা দেওয়ার অনুমতি নেই।");
+      if (alreadyTaken && !allowRetakeByAdmin) {
+        alert("Apni eti purbe ei porikkhay ongsho niyechhen! Punoray porikkha dewar onumoti nei.");
         return;
       }
 
       if (masterQuestions.length === 0) {
-        alert(`ক্লাস ${studentClass}-এর জন্য কোনো প্রশ্ন পাওয়া যায়নি! শিক্ষক প্যানেল থেকে এই ক্লাসের প্রশ্ন সেট করুন।`);
+        alert(`Class ${studentClass}-er jonno kono proshno pawa jayni!`);
         return;
       }
 
-      // Save current active session state
       currentStudentSession = { examName: examTitle, studentContact: contact };
 
       activeExamQuestions = shuffleArray(masterQuestions).map(q => {
@@ -853,13 +858,13 @@
         const mins = Math.floor(timeRemainingSeconds / 60);
         const secs = timeRemainingSeconds % 60;
         document.getElementById('timer-display').innerText = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        if (timeRemainingSeconds <= 0) { clearInterval(timerInterval); alert("সময় শেষ!"); submitExam(); }
+        if (timeRemainingSeconds <= 0) { clearInterval(timerInterval); alert("Somoy shesh!"); submitExam(); }
       }, 1000);
     }
 
     function renderQuestion() {
       const q = activeExamQuestions[currentQuestionIdx];
-      document.getElementById('question-number-badge').innerText = `প্রশ্ন ${currentQuestionIdx + 1} / ${activeExamQuestions.length}`;
+      document.getElementById('question-number-badge').innerText = `Proshno ${currentQuestionIdx + 1} / ${activeExamQuestions.length}`;
       document.getElementById('question-text').innerText = q.text;
 
       const optsContainer = document.getElementById('options-container');
@@ -920,14 +925,13 @@
 
       if (isCloudConnected && db) {
         try {
-          // Double check before final save to ensure no race condition duplicate entry
           const dupCheck = await db.collection("exam_results")
             .where("examName", "==", record.examName)
             .where("studentContact", "==", record.studentContact)
             .get();
           
           if (!dupCheck.empty) {
-            alert("আপনার পরীক্ষাটি ইতিপূর্বেই জমা দেওয়া হয়েছে!");
+            alert("Apnar porikkha-ti itipurbe-i joma dewa hoyeche!");
           } else {
             await db.collection("exam_results").add(record);
           }
@@ -943,7 +947,7 @@
         }
       }
 
-      currentStudentSession = null; // Clear session
+      currentStudentSession = null; 
 
       document.getElementById('student-test-portal').classList.add('hidden');
       document.getElementById('student-scorecard').classList.remove('hidden');

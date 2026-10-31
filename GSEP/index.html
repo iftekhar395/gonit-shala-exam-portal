@@ -16,7 +16,6 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
   <style>
-    /* Admin panel-e copy allow korar jonno student-test-portal e matro selection bandha rakha holo */
     #student-test-portal {
       -webkit-user-select: none;
       -moz-user-select: none;
@@ -302,13 +301,13 @@
 
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
-  	  authDomain: "gonitshala-5a622.firebaseapp.com",
- 	    projectId: "gonitshala-5a622",
-  	  storageBucket: "gonitshala-5a622.firebasestorage.app",
-  	  messagingSenderId: "492965096585",
-  	  appId: "1:492965096585:web:42f96defa9182162ee2a58",
-  	  measurementId: "G-JJ0RWNLHR0"
+    apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
+  	authDomain: "gonitshala-5a622.firebaseapp.com",
+ 	  projectId: "gonitshala-5a622",
+  	storageBucket: "gonitshala-5a622.firebasestorage.app",
+  	messagingSenderId: "492965096585",
+  	appId: "1:492965096585:web:42f96defa9182162ee2a58",
+  	measurementId: "G-JJ0RWNLHR0"
     };
 
     let db = null;
@@ -334,6 +333,7 @@
     let studentAnswers = {};
     let timerInterval = null;
     let timeRemainingSeconds = 0;
+    let currentStudentSession = null; // Prevent duplicate active submission clicks
 
     window.onload = function() {
       loadSavedData();
@@ -382,7 +382,6 @@
       alert("Admin panel data refreshed successfully!");
     }
 
-    // Load config dynamically when admin changes target class input field
     function loadConfigForClass() {
       const targetClass = document.getElementById('cfg-target-class').value.trim() || "default";
       document.getElementById('preview-class-label').innerText = "Class " + targetClass;
@@ -400,7 +399,6 @@
         document.getElementById('cfg-passmark').value = 60;
       }
 
-      // Load questions for this specific class
       let qBank = localStorage.getItem('nexus_question_bank_' + targetClass);
       if (qBank) {
         try { masterQuestions = JSON.parse(qBank); } catch(e) { masterQuestions = []; }
@@ -758,9 +756,7 @@
       let activeWhitelist = [...whitelistStudents];
       let examTitle = "Exam";
       let examDuration = 10;
-      let targetClass = studentClass;
 
-      // Dynamic Class config load
       let allClassConfigs = JSON.parse(localStorage.getItem('nexus_all_class_configs') || '{}');
       if (allClassConfigs[studentClass]) {
         const clsCfg = allClassConfigs[studentClass];
@@ -800,6 +796,8 @@
         return;
       }
 
+      // STRICT CHECK: Check if student already submitted this exam in Cloud or Local storage
+      let alreadyTaken = false;
       if (isCloudConnected && db) {
         try {
           const querySnapshot = await db.collection("exam_results")
@@ -807,26 +805,29 @@
             .where("studentContact", "==", contact)
             .get();
           
-          if (!querySnapshot.empty && (!studentRecord || !studentRecord.allowRetake)) {
-            alert("আপনি ইতিপূর্বে এই পরীক্ষায় অংশগ্রহণ করেছেন। অ্যাডমিন থেকে পুনরায় পরীক্ষা দেওয়ার অনুমতি (Retake) দেওয়া হয়নি।");
-            return;
+          if (!querySnapshot.empty) {
+            alreadyTaken = true;
           }
         } catch(e) {
           console.warn("Retake check error", e);
         }
       } else {
         const localResults = JSON.parse(localStorage.getItem('nexus_exam_results') || '[]');
-        const alreadyTaken = localResults.some(r => r.examName === examTitle && r.studentContact === contact);
-        if (alreadyTaken && (!studentRecord || !studentRecord.allowRetake)) {
-          alert("আপনি ইতিপূর্বে এই পরীক্ষায় অংশগ্রহণ করেছেন এবং রিটেক অনুমোদিত নয়।");
-          return;
-        }
+        alreadyTaken = localResults.some(r => r.examName === examTitle && r.studentContact === contact);
+      }
+
+      if (alreadyTaken && (!studentRecord || !studentRecord.allowRetake)) {
+        alert("আপনি ইতিমধ্যে এই পরীক্ষায় অংশগ্রহণ করেছেন! পুনরায় পরীক্ষা দেওয়ার অনুমতি নেই।");
+        return;
       }
 
       if (masterQuestions.length === 0) {
         alert(`ক্লাস ${studentClass}-এর জন্য কোনো প্রশ্ন পাওয়া যায়নি! শিক্ষক প্যানেল থেকে এই ক্লাসের প্রশ্ন সেট করুন।`);
         return;
       }
+
+      // Save current active session state
+      currentStudentSession = { examName: examTitle, studentContact: contact };
 
       activeExamQuestions = shuffleArray(masterQuestions).map(q => {
         const correctOptText = q.options[q.correct];
@@ -893,8 +894,10 @@
       });
     }
 
-    function submitExam() {
+    async function submitExam() {
+      if (!currentStudentSession) return;
       clearInterval(timerInterval);
+
       let correctCount = 0;
       activeExamQuestions.forEach((q, idx) => { if (studentAnswers[idx] === q.correct) correctCount++; });
 
@@ -904,11 +907,11 @@
       const isPassed = percentage >= passMarkInput;
 
       const record = {
-        examName: document.getElementById('cfg-title').value,
+        examName: currentStudentSession.examName,
         studentName: document.getElementById('std-name').value,
         studentClass: document.getElementById('std-class').value,
         studentRoll: document.getElementById('std-roll').value,
-        studentContact: document.getElementById('std-contact').value,
+        studentContact: currentStudentSession.studentContact,
         score: `${correctCount} / ${total}`,
         percentage: `${percentage}%`,
         status: isPassed ? 'PASSED' : 'FAILED',
@@ -916,12 +919,31 @@
       };
 
       if (isCloudConnected && db) {
-        db.collection("exam_results").add(record).catch(err => console.error(err));
+        try {
+          // Double check before final save to ensure no race condition duplicate entry
+          const dupCheck = await db.collection("exam_results")
+            .where("examName", "==", record.examName)
+            .where("studentContact", "==", record.studentContact)
+            .get();
+          
+          if (!dupCheck.empty) {
+            alert("আপনার পরীক্ষাটি ইতিপূর্বেই জমা দেওয়া হয়েছে!");
+          } else {
+            await db.collection("exam_results").add(record);
+          }
+        } catch(err) {
+          console.error(err);
+        }
       } else {
         const existing = JSON.parse(localStorage.getItem('nexus_exam_results') || '[]');
-        existing.push(record);
-        localStorage.setItem('nexus_exam_results', JSON.stringify(existing));
+        const alreadyExists = existing.some(r => r.examName === record.examName && r.studentContact === record.studentContact);
+        if (!alreadyExists) {
+          existing.push(record);
+          localStorage.setItem('nexus_exam_results', JSON.stringify(existing));
+        }
       }
+
+      currentStudentSession = null; // Clear session
 
       document.getElementById('student-test-portal').classList.add('hidden');
       document.getElementById('student-scorecard').classList.remove('hidden');

@@ -61,22 +61,22 @@
 
       <!-- Exam Configuration & Branding -->
       <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        <h2 class="text-lg font-bold text-slate-900">1. Exam Configuration & Targeting</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Active Exam Title</label>
-            <input type="text" id="cfg-title" value="General Knowledge Quiz" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
-          </div>
+        <h2 class="text-lg font-bold text-slate-900">1. Class-wise Exam Configuration</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Target Class</label>
-            <input type="text" id="cfg-target-class" value="10" placeholder="e.g. 10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+            <input type="text" id="cfg-target-class" value="10" placeholder="e.g. 10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300 bg-indigo-50 font-bold text-indigo-900">
           </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Exam Title for this Class</label>
+            <input type="text" id="cfg-title" value="Math Quiz - Class 10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Duration (Minutes)</label>
             <input type="number" id="cfg-duration" value="10" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
           </div>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pass Mark (%)</label>
             <input type="number" id="cfg-passmark" value="60" onchange="saveConfig()" class="w-full border rounded-lg p-2 text-sm border-slate-300">
@@ -179,7 +179,7 @@
         <div class="flex justify-center mb-4">
           <img id="login-card-logo" src="/images/logo.jpeg" alt="Logo" class="w-16 h-16 object-contain bg-slate-50 rounded-full p-2 border shadow-sm">
         </div>
-        <h2 id="login-portal-title" class="text-2xl font-bold text-slate-900 mb-2">Student Examination Portal</h2>
+        <h2 id="login-portal-title" class="text-2xl font-bold text-slate-900 mb-2">GonitShala Exam Portal</h2>
         <p class="text-sm text-slate-500 mb-6">Enter your authorized details to begin.</p>
         <div class="space-y-4 text-left">
           <div>
@@ -303,13 +303,13 @@
 
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
-  	  authDomain: "gonitshala-5a622.firebaseapp.com",
- 	    projectId: "gonitshala-5a622",
-  	  storageBucket: "gonitshala-5a622.firebasestorage.app",
-  	  messagingSenderId: "492965096585",
-  	  appId: "1:492965096585:web:42f96defa9182162ee2a58",
-  	  measurementId: "G-JJ0RWNLHR0"
+    apiKey: "AIzaSyAKjLNhTdo4PIU1gOeITYkWvao5SUJRQ1M",
+  	authDomain: "gonitshala-5a622.firebaseapp.com",
+ 	  projectId: "gonitshala-5a622",
+  	storageBucket: "gonitshala-5a622.firebasestorage.app",
+  	messagingSenderId: "492965096585",
+  	appId: "1:492965096585:web:42f96defa9182162ee2a58",
+  	measurementId: "G-JJ0RWNLHR0"
     };
 
     let db = null;
@@ -396,10 +396,18 @@
         passmark: document.getElementById('cfg-passmark').value,
         logo: document.getElementById('cfg-logo').value
       };
+      
+      // Store class-wise configuration separately in local storage / cloud
+      const targetClass = config.targetClass || "default";
+      let allClassConfigs = JSON.parse(localStorage.getItem('nexus_all_class_configs') || '{}');
+      allClassConfigs[targetClass] = config;
+      localStorage.setItem('nexus_all_class_configs', JSON.stringify(allClassConfigs));
+      
       localStorage.setItem('nexus_exam_config', JSON.stringify(config));
       applyBranding(config);
 
       if (isCloudConnected && db) {
+        db.collection("exam_settings").doc("config_" + targetClass).set(config, { merge: true }).catch(err => console.error(err));
         db.collection("exam_settings").doc("config").set(config, { merge: true }).catch(err => console.error(err));
       }
     }
@@ -555,6 +563,15 @@
         masterQuestions = [...targetSet.questions];
         document.getElementById('cfg-title').value = targetSet.name;
         document.getElementById('cfg-target-class').value = targetSet.targetClass || "";
+        
+        // Load config specific to this class if available
+        let allClassConfigs = JSON.parse(localStorage.getItem('nexus_all_class_configs') || '{}');
+        if (targetSet.targetClass && allClassConfigs[targetSet.targetClass]) {
+          const clsCfg = allClassConfigs[targetSet.targetClass];
+          if (clsCfg.duration) document.getElementById('cfg-duration').value = clsCfg.duration;
+          if (clsCfg.passmark) document.getElementById('cfg-passmark').value = clsCfg.passmark;
+        }
+
         saveConfig();
         saveQuestions();
         alert(`Loaded paper: "${targetSet.name}" for Class ${targetSet.targetClass}!`);
@@ -764,21 +781,35 @@
       }
 
       let activeWhitelist = [...whitelistStudents];
-      let examTitle = document.getElementById('cfg-title').value;
-      let examDuration = parseInt(document.getElementById('cfg-duration').value || "10");
-      let targetClass = document.getElementById('cfg-target-class').value.trim();
+      let examTitle = "Exam Title";
+      let examDuration = 10;
+      let targetClass = studentClass;
+
+      // Fetch class-specific configuration
+      let allClassConfigs = JSON.parse(localStorage.getItem('nexus_all_class_configs') || '{}');
+      if (allClassConfigs[studentClass]) {
+        const clsCfg = allClassConfigs[studentClass];
+        examTitle = clsCfg.title || "Exam";
+        examDuration = parseInt(clsCfg.duration || "10");
+        targetClass = clsCfg.targetClass || studentClass;
+      } else {
+        examTitle = document.getElementById('cfg-title').value;
+        examDuration = parseInt(document.getElementById('cfg-duration').value || "10");
+        targetClass = document.getElementById('cfg-target-class').value.trim();
+      }
 
       if (isCloudConnected && db) {
         try {
-          const doc = await db.collection("exam_settings").doc("config").get();
+          const doc = await db.collection("exam_settings").doc("config_" + studentClass).get();
           if (doc.exists) {
             const data = doc.data();
-            if (data.whitelistArray) {
-              activeWhitelist = data.whitelistArray.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
-            }
             if (data.title) examTitle = data.title;
-            if (data.targetClass) targetClass = data.targetClass;
             if (data.duration) examDuration = parseInt(data.duration);
+          }
+
+          const docCfg = await db.collection("exam_settings").doc("config").get();
+          if (docCfg.exists && docCfg.data().whitelistArray) {
+            activeWhitelist = docCfg.data().whitelistArray.map(item => typeof item === 'string' ? { contact: item, allowRetake: false } : item);
           }
 
           const qDoc = await db.collection("exam_settings").doc("questions").get();

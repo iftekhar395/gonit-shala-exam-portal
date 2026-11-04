@@ -108,10 +108,12 @@
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center bg-slate-50 p-4 rounded-xl border">
           <input type="text" id="new-set-name" placeholder="Enter Paper Name" class="border rounded-lg p-2 text-sm border-slate-300 bg-white">
           <input type="text" id="new-set-class" placeholder="Target Class (e.g. 7, 8, 9...)" class="border rounded-lg p-2 text-sm border-slate-300 bg-white">
+
           <label class="cursor-pointer bg-indigo-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-indigo-700 transition flex items-center gap-1 justify-center">
-            <span>📁 Upload JSON</span>
-            <input type="file" id="question-file-input" accept=".json" class="hidden" onchange="handleFileUpload(event)">
+            <span>📁 Upload JSON, PDF or Image</span>
+            <input type="file" id="question-file-input" accept=".json, .pdf, .png, .jpg, .jpeg" class="hidden" onchange="handleFileUpload(event)">
           </label>
+          
         </div>
         <div class="flex justify-end">
           <button onclick="saveCurrentAsNewSet()" class="text-xs bg-emerald-600 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-emerald-700">
@@ -716,6 +718,7 @@
       statusEl.innerText = `Reading ${file.name}...`;
 
       const ext = file.name.split('.').pop().toLowerCase();
+    
       if (ext === 'json') {
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -723,12 +726,57 @@
             masterQuestions = JSON.parse(e.target.result);
             saveQuestions();
             statusEl.innerText = `Loaded ${masterQuestions.length} questions successfully!`;
-            statusEl.classList.add('hidden');
-          } catch(err) { alert("Invalid JSON"); statusEl.classList.add('hidden'); }
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+          } catch(err) { 
+            alert("Invalid JSON format"); 
+            statusEl.classList.add('hidden'); 
+          }
         };
         reader.readAsText(file);
-      } else {
-        alert("Please upload a .json question file.");
+      } 
+      else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+        statusEl.innerText = `Scanning Image with OCR...`;
+        Tesseract.recognize(
+          file,
+          'eng', // প্রয়োজনে বাংলা OCR এর জন্য 'ben' দিতে পারেন যদি ট্রেন্ড ডেট থাকে
+          { logger: m => console.log(m) }
+        ).then(({ data: { text } }) => {
+          statusEl.innerText = `Image scanned. Processing text...`;
+          console.log(text);
+          // এখানে স্ক্যান করা টেক্সট থেকে প্রশ্ন পার্স করার লজিক যুক্ত করা যেতে পারে
+          alert("Image text read successfully. Check console for output.");
+          statusEl.classList.add('hidden');
+        }).catch(err => {
+          alert("OCR Error: " + err);
+          statusEl.classList.add('hidden');
+        });
+      }
+      else if (ext === 'pdf') {
+        statusEl.innerText = `Reading PDF file...`;
+        const reader = new FileReader();
+        reader.onload = async function() {
+          const typedarray = new Uint8Array(this.result);
+          try {
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + "\n";
+            }
+            statusEl.innerText = `PDF read successfully! Total pages: ${pdf.numPages}`;
+            console.log(fullText);
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+          } catch (err) {
+            alert("Error reading PDF: " + err.message);
+            statusEl.classList.add('hidden');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } 
+      else {
+        alert("Please upload a valid .json, .pdf, or image file.");
         statusEl.classList.add('hidden');
       }
     }
